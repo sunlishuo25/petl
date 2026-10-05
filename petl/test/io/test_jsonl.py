@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import, print_function, division
 
+from collections import OrderedDict
 from tempfile import NamedTemporaryFile
 from decimal import Decimal
 import json
@@ -175,9 +176,14 @@ def test_fromjson_lines_decoder_error_timing(tmpdir, header):
 
 @pytest.mark.parametrize('header', [None, ['NAME', 'EXTRA']])
 @pytest.mark.parametrize('custom_decoder', [False, True])
-def test_fromjson_lines_object_hook(tmpdir, header, custom_decoder):
+@pytest.mark.parametrize('reverse_order', [False, True])
+def test_fromjson_lines_object_hook(tmpdir, header, custom_decoder,
+                                   reverse_order):
     def uppercase_keys(record):
-        return {key.upper(): value for key, value in record.items()}
+        values = {key.upper(): value for key, value in record.items()}
+        if reverse_order:
+            return OrderedDict(sorted(values.items()))
+        return values
 
     class UppercaseDecoder(json.JSONDecoder):
         def __init__(self, *args, **kwargs):
@@ -192,8 +198,15 @@ def test_fromjson_lines_object_hook(tmpdir, header, custom_decoder):
     actual = fromjson(str(path), lines=True, header=header, missing='NA',
                       **options)
     expected = [('NAME', 'EXTRA'), ('first', {'NESTED': 1}), ('second', 'NA')]
-    assert list(actual) == expected
-    assert list(actual) == expected
+    for _ in range(2):
+        rows = list(actual)
+        if header is None:
+            assert sorted(rows[0]) == sorted(expected[0])
+            assert all(len(row) == len(rows[0]) for row in rows[1:])
+            assert [dict(zip(rows[0], row)) for row in rows[1:]] == [
+                dict(zip(expected[0], row)) for row in expected[1:]]
+        else:
+            assert rows == expected
 
 
 @pytest.mark.parametrize('header', [None, ['value']])
