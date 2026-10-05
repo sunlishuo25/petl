@@ -6,6 +6,8 @@ Unreleased
 
 * Apply JSON decoder options in ``fromjson(..., lines=True)`` during header
   discovery and row parsing, including custom decoders and numeric parsers.
+  Reuse the first decoded record for header discovery and row output so
+  stateful decoder callbacks do not process it twice within one iteration.
   By :user:`sunlishuo25`.
 
 Version 1.7.28
