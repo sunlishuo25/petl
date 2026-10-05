@@ -123,7 +123,7 @@ class JsonView(Table):
             try:
                 if self.lines:
                     for row in iterjlines(f, self._header, self.missing,
-                                         *self.args, **self.kwargs):
+                                         self.args, self.kwargs):
                         yield row
                 else:
                     dicts = json.load(f, *self.args, **self.kwargs)
@@ -331,7 +331,9 @@ class DictsGeneratorView(DictsView):
             unlink(self._filecache.name)
 
 
-def iterjlines(f, header, missing, *args, **kwargs):
+def iterjlines(f, header, missing, args=(), kwargs=None):
+    if kwargs is None:
+        kwargs = {}
     it = iter(f)
 
     if header is None:

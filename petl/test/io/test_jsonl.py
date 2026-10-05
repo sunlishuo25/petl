@@ -8,6 +8,7 @@ import json
 import pytest
 
 from petl import fromjson, tojson
+from petl.io.json import iterjlines
 from petl.test.helpers import ieq
 
 
@@ -61,6 +62,32 @@ def test_fromjson_lines_invalid_decoder_option(tmpdir, header):
     with pytest.raises(TypeError):
         list(fromjson(str(path), lines=True, header=header,
                       unknown_decoder_option=True))
+
+
+@pytest.mark.parametrize('lines', [False, True])
+@pytest.mark.parametrize('header', [None, ['value']])
+@pytest.mark.parametrize('option', ['f', 'args', 'kwargs'])
+def test_fromjson_custom_decoder_keyword_names(tmpdir, lines, header, option):
+    class OptionDecoder(json.JSONDecoder):
+        def __init__(self, **kwargs):
+            prefix = kwargs.pop(option)
+            kwargs['parse_int'] = lambda value: prefix + value
+            json.JSONDecoder.__init__(self, **kwargs)
+
+    records = ['{"value": 1}', '{"value": 2}']
+    text = '\n'.join(records) if lines else '[' + ','.join(records) + ']'
+    path = tmpdir.join('custom-options.json')
+    path.write(text)
+    options = {'cls': OptionDecoder, option: 'decoded-'}
+    actual = fromjson(str(path), lines=lines, header=header, **options)
+    expected = [('value',), ('decoded-1',), ('decoded-2',)]
+    assert actual.list() == expected
+    assert actual.list() == expected
+
+
+def test_iterjlines_three_argument_call():
+    actual = iterjlines(['{"value": 1}\n', '{"value": 2}\n'], None, None)
+    assert list(actual) == [('value',), (1,), (2,)]
 
 
 def test_fromjson_1():
