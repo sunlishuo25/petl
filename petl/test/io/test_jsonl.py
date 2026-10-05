@@ -2,10 +2,65 @@
 from __future__ import absolute_import, print_function, division
 
 from tempfile import NamedTemporaryFile
+from decimal import Decimal
 import json
+
+import pytest
 
 from petl import fromjson, tojson
 from petl.test.helpers import ieq
+
+
+@pytest.mark.parametrize('lines', [False, True])
+@pytest.mark.parametrize('header', [None, ['amount', 'count', 'constant']])
+def test_fromjson_decoder_options(tmpdir, lines, header):
+    records = [('{"amount": 0.12345678901234567890123456789, '
+                '"count": 9007199254740993, "constant": NaN}'),
+               '{"amount": -1.25, "count": 0, "constant": Infinity}']
+    text = '\n'.join(records) if lines else '[' + ','.join(records) + ']'
+    path = tmpdir.join('numbers.json')
+    path.write(text)
+    actual = fromjson(str(path), lines=lines, header=header,
+                      parse_float=Decimal, parse_int=str,
+                      parse_constant=lambda value: None)
+    expected = [('amount', 'count', 'constant'),
+                (Decimal('0.12345678901234567890123456789'),
+                 '9007199254740993', None),
+                (Decimal('-1.25'), '0', None)]
+    assert list(actual) == expected
+    assert list(actual) == expected
+
+
+@pytest.mark.parametrize('header', [None, ['NAME', 'EXTRA']])
+@pytest.mark.parametrize('custom_decoder', [False, True])
+def test_fromjson_lines_object_hook(tmpdir, header, custom_decoder):
+    def uppercase_keys(record):
+        return {key.upper(): value for key, value in record.items()}
+
+    class UppercaseDecoder(json.JSONDecoder):
+        def __init__(self, *args, **kwargs):
+            kwargs['object_hook'] = uppercase_keys
+            json.JSONDecoder.__init__(self, *args, **kwargs)
+
+    options = ({'cls': UppercaseDecoder} if custom_decoder else
+               {'object_hook': uppercase_keys})
+    path = tmpdir.join('objects.jsonl')
+    path.write('{"name": "first", "extra": {"nested": 1}}\n'
+               '{"name": "second"}\n')
+    actual = fromjson(str(path), lines=True, header=header, missing='NA',
+                      **options)
+    expected = [('NAME', 'EXTRA'), ('first', {'NESTED': 1}), ('second', 'NA')]
+    assert list(actual) == expected
+    assert list(actual) == expected
+
+
+@pytest.mark.parametrize('header', [None, ['value']])
+def test_fromjson_lines_invalid_decoder_option(tmpdir, header):
+    path = tmpdir.join('options.jsonl')
+    path.write('{"value": 1}\n')
+    with pytest.raises(TypeError):
+        list(fromjson(str(path), lines=True, header=header,
+                      unknown_decoder_option=True))
 
 
 def test_fromjson_1():

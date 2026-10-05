@@ -52,6 +52,11 @@ def fromjson(source, *args, **kwargs):
     An empty JSON lines file produces a table with no data rows. If no
     `header` is supplied, the table has an empty header tuple.
 
+    Additional arguments are passed to :func:`json.load`, or to
+    :func:`json.loads` for each JSON line. For example, ``parse_float=Decimal``
+    preserves decimal precision in both formats. Decoder options also apply
+    when discovering the header from the first JSON line.
+
         >>> import petl as etl
         >>> data_with_jlines = '''{"name": "Gilbert", "wins": [["straight", "7S"], ["one pair", "10H"]]}
         ... {"name": "Alexa", "wins": [["two pair", "4S"], ["two pair", "9S"]]}
@@ -117,7 +122,8 @@ class JsonView(Table):
                                      write_through=True)
             try:
                 if self.lines:
-                    for row in iterjlines(f, self._header, self.missing):
+                    for row in iterjlines(f, self._header, self.missing,
+                                         *self.args, **self.kwargs):
                         yield row
                 else:
                     dicts = json.load(f, *self.args, **self.kwargs)
@@ -325,7 +331,7 @@ class DictsGeneratorView(DictsView):
             unlink(self._filecache.name)
 
 
-def iterjlines(f, header, missing):
+def iterjlines(f, header, missing, *args, **kwargs):
     it = iter(f)
 
     if header is None:
@@ -335,13 +341,13 @@ def iterjlines(f, header, missing):
         except StopIteration:
             yield tuple()
             return
-        json_obj = json.loads(peek)
+        json_obj = json.loads(peek, *args, **kwargs)
         if hasattr(json_obj, 'keys'):
             header += [k for k in json_obj.keys() if k not in header]
     yield tuple(header)
 
     for o in it:
-        json_obj = json.loads(o)
+        json_obj = json.loads(o, *args, **kwargs)
         yield tuple(json_obj[f] if f in json_obj else missing for f in header)
 
 
